@@ -4,5 +4,6 @@ const fileController = require('../controller/files.controller');
 router.post('/api/files',fileController.createNewFileForUser);
 router.put('/api/files',fileController.addMembers);
 router.get('/api/files',fileController.getFilesForUser);
+router.get('/api/files/test',fileController.test);
 router.delete('/api/files',fileController.removeMembers);
 module.exports=router;

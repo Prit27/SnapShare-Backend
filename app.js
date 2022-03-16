@@ -3,7 +3,6 @@ const userRouter = require('./src/routes/user.routes')
 const fileRouter = require('./src/routes/file.routes')
 
 const requireAuthentication = require('./src/util/auth/authenticator')
-//const authenticatedUser = require('./src/util/auth/auth')
 const bodyParser = require('body-parser')
 const app = express();
 app.use(bodyParser.json());
