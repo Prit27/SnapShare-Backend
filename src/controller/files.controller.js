@@ -4,8 +4,8 @@ const dynamoDbClient = require("@aws-sdk/client-dynamodb");
 const client = require("../util/aws/dynamo/dynamo.provider");
 const s3Client = require("../util/aws/s3/s3.provider");
 const urlUtil = require("../util/url/url");
-const { getSignedUrl  } = require("@aws-sdk/s3-request-presigner");
-const uuid = require('uuid');
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const uuid = require("uuid");
 const {
   FILE_TABLE_NAME,
   MEMBER_UPDATE_VALUE,
@@ -30,13 +30,13 @@ const createNewFileForUser = async (req, res) => {
       id: { S: String(uuid.v4()) },
       created: { S: String(fileRequest.created) },
       path: { S: fileRequest.path },
-      createdBy: { S: user.Email },
+      createdBy: { S: user.email },
       password: { S: password },
       passwordEnabled: { S: String(req.body.passwordEnabled) },
-      fileName:{S:fileRequest.fileName},
-      fileSize:{S:fileRequest.fileSize},
-      fileType:{S:fileRequest.fileType},
-      enabled: { S: "true" }
+      fileName: { S: fileRequest.fileName },
+      fileSize: { S: fileRequest.fileSize },
+      fileType: { S: fileRequest.fileType },
+      enabled: { S: "true" },
     },
   };
   try {
@@ -48,7 +48,7 @@ const createNewFileForUser = async (req, res) => {
 };
 const addMembers = async (req, res) => {
   const user = auth.getAuthenticatedUser();
-  console.log(user.Email);
+  console.log(user.email);
   const usersToBeAdded = req.body.users;
   const fileId = req.body.fileId;
   console.log(usersToBeAdded);
@@ -78,7 +78,7 @@ const addMembers = async (req, res) => {
 
 const removeMembers = async (req, res) => {
   const user = auth.getAuthenticatedUser();
-  console.log(user.Email);
+  console.log(user.email);
   const usersToBeAdded = req.body.users;
   const fileId = req.body.fileId;
   console.log(usersToBeAdded);
@@ -115,7 +115,7 @@ const getFilesForUser = async (req, res) => {
       "#createdBy": "createdBy",
     },
     ExpressionAttributeValues: {
-      ":createdBy": { S: user.Email },
+      ":createdBy": { S: user.email },
     },
   };
   try {
@@ -157,24 +157,23 @@ const getFileById = async (fileId) => {
 /*  GET Shared Files for User 
   REFER https://stackoverflow.com/questions/44990872/dynamodb-query-by-contains-one-of-the-values-from-array-for-node-js
 */
-const getSharedFile = async (req,res) => {
+const getSharedFile = async (req, res) => {
   const user = auth.getAuthenticatedUser();
   const params = {
     TableName: "Files",
-    FilterExpression:"contains (sharedWith,:sharedWith)",
-    ExpressionAttributeValues:{
-      ':sharedWith': {S: user.Email}
-    }
+    FilterExpression: "contains (sharedWith,:sharedWith)",
+    ExpressionAttributeValues: {
+      ":sharedWith": { S: user.email },
+    },
   };
-    try {
-      const data = await client.send(new dynamoDbClient.ScanCommand(params));
-      res.status(200).json({success:true,data:data});
-    } catch (error) {
-      console.log(error.message);
-      res.status(500).json({ success: false, message: error.message });  
-    }
-  }; 
-
+  try {
+    const data = await client.send(new dynamoDbClient.ScanCommand(params));
+    res.status(200).json({ success: true, data: data });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 /*
  POST file api
@@ -190,17 +189,19 @@ const getFile = async (req, res) => {
     const filePassword = file.password.S;
     if (password === filePassword) {
       const s3Url = await getSignedUrlFromS3(file.path.S);
-      res.status(200).json({success:true,message:"File Retrieved",data:s3Url});
-    }
-    else {
+      res
+        .status(200)
+        .json({ success: true, message: "File Retrieved", data: s3Url });
+    } else {
       res
         .status(401)
         .json({ success: false, message: "Password Incorrect: Unauthorized" });
     }
-  } 
-  else{
+  } else {
     const s3Url = await getSignedUrlFromS3(file.path.S);
-    res.status(200).json({success:true,message:"File Retrieved",data:s3Url});
+    res
+      .status(200)
+      .json({ success: true, message: "File Retrieved", data: s3Url });
   }
 };
 
@@ -209,7 +210,7 @@ const getSignedUrlFromS3 = async (fileUrl) => {
     const filePath = urlUtil.getFilePathFromUrl(fileUrl);
     console.log(filePath);
     const fileName = filePath.substring(1, filePath.length);
-    const bucketName="snapshare-s3-bucket";
+    const bucketName = "snapshare-s3-bucket";
     const bucketGetParameters = {
       Bucket: bucketName,
       Key: fileName,
@@ -224,6 +225,33 @@ const getSignedUrlFromS3 = async (fileUrl) => {
   }
 };
 
+const deleteFileForUser = async (req, res) => {
+  const fileId = req.body.fileId;
+  const user = auth.getAuthenticatedUser();
+  const file = await getFileById(fileId);
+  console.log(file);
+  if (file.createdBy.S === user.email) {
+    const params = {
+      TableName: "Files",
+      Key: {
+        id: file.id,
+      },
+    };
+    try {
+      const response = await client.send(
+        new dynamoDbClient.DeleteItemCommand(params)
+      );
+      res.status(200).json({ success: true, data: response });
+    } catch (error) {
+      res.status(200).json({ success: false, data: error.message });
+    }
+  } else {
+    res
+      .status(400)
+      .json({ success: false, message: "Cannot delete file not owned by you" });
+  }
+};
+
 exports.createNewFileForUser = createNewFileForUser;
 exports.addMembers = addMembers;
 exports.getFilesForUser = getFilesForUser;
@@ -231,4 +259,5 @@ exports.removeMembers = removeMembers;
 exports.test = test;
 exports.getFile = getFile;
 exports.getSharedFile = getSharedFile;
+exports.deleteFileForUser = deleteFileForUser;
 // creating a dynamodb PUT object

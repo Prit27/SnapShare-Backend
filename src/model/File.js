@@ -15,6 +15,9 @@ const file = new Schema({
   created:String,
   path:String,
   createdBy:String,
+  fileName:String,
+  fileType:String,
+  fileSize:String,
   sharedWith:{
     type:Array,
     default:[]
