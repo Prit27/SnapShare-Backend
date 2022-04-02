@@ -4,7 +4,10 @@
   "description": "SnapShare API",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm install && node -r dotenv/config index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev":"nodemon -r dotenv/config index.js"
+
   },
   "license": "ISC",
   "dependencies": {
@@ -20,5 +23,8 @@
     "mongoose": "^6.2.6",
     "url": "^0.11.0",
     "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
   }
 }

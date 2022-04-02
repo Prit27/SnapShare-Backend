@@ -4,6 +4,7 @@ const dynamoDbClient = require("@aws-sdk/client-dynamodb");
 const client = require("../util/aws/dynamo/dynamo.provider");
 const s3Client = require("../util/aws/s3/s3.provider");
 const urlUtil = require("../util/url/url");
+const { getSignedUrl  } = require("@aws-sdk/s3-request-presigner");
 const uuid = require('uuid');
 const {
   FILE_TABLE_NAME,
@@ -11,6 +12,7 @@ const {
   ADD_MEMBER_UPDATE_EXPRESSION,
   DELETE_MEMBER_UPDATE_EXPRESSION,
 } = require("../util/constants/constants");
+const { GetObjectCommand } = require("@aws-sdk/client-s3");
 
 const createNewFileForUser = async (req, res) => {
   const user = auth.getAuthenticatedUser();
@@ -31,7 +33,7 @@ const createNewFileForUser = async (req, res) => {
       createdBy: { S: user.Email },
       password: { S: password },
       passwordEnabled: { S: String(req.body.passwordEnabled) },
-      enabled: { S: "true" },
+      enabled: { S: "true" }
     },
   };
   try {
@@ -51,11 +53,11 @@ const addMembers = async (req, res) => {
   const params = {
     TableName: FILE_TABLE_NAME,
     Key: {
-      id: { S: user.Email },
+      id: { S: fileId },
     },
-    UpdateExpression: ADD_MEMBER_UPDATE_EXPRESSION,
+    UpdateExpression: "ADD sharedWith :sharedWith",
     ExpressionAttributeValues: {
-      MEMBER_UPDATE_VALUE: { SS: usersToBeAdded },
+      ":sharedWith": { SS: usersToBeAdded },
     },
     ReturnValues: "UPDATED_NEW",
   };
@@ -81,11 +83,11 @@ const removeMembers = async (req, res) => {
   const params = {
     TableName: FILE_TABLE_NAME,
     Key: {
-      id: { S: user.Email },
+      id: { S: fileId },
     },
-    UpdateExpression: DELETE_MEMBER_UPDATE_EXPRESSION,
+    UpdateExpression: "DELETE sharedWith :sharedWith",
     ExpressionAttributeValues: {
-      MEMBER_UPDATE_VALUE: { SS: usersToBeAdded },
+      ":sharedWith": { SS: usersToBeAdded },
     },
     ReturnValues: "ALL_NEW",
   };
@@ -152,6 +154,24 @@ const getFileById = async (fileId) => {
 /*  GET Shared Files for User 
   REFER https://stackoverflow.com/questions/44990872/dynamodb-query-by-contains-one-of-the-values-from-array-for-node-js
 */
+const getSharedFile = async (req,res) => {
+  const user = auth.getAuthenticatedUser();
+  const params = {
+    TableName: "Files",
+    FilterExpression:"contains (sharedWith,:sharedWith)",
+    ExpressionAttributeValues:{
+      ':sharedWith': {S: user.Email}
+    }
+  };
+    try {
+      const data = await client.send(new dynamoDbClient.ScanCommand(params));
+      res.status(200).json({success:true,data:data});
+    } catch (error) {
+      console.log(error.message);
+      res.status(500).json({ success: false, message: error.message });  
+    }
+  }; 
+
 
 /*
  POST file api
@@ -161,25 +181,32 @@ const getFileById = async (fileId) => {
 const getFile = async (req, res) => {
   const fileId = req.body.fileId;
   const password = req.body.password;
-  const file = getFileById(fileId);
+  const file = await getFileById(fileId);
+  console.log(file);
   if (file.passwordEnabled.S === "true") {
     const filePassword = file.password.S;
     if (password === filePassword) {
+      const s3Url = await getSignedUrlFromS3(file.path.S);
+      res.status(200).json({success:true,message:"File Retrieved",data:s3Url});
     }
-    res
-      .status(401)
-      .json({ success: false, message: "Password Incorrect: Unauthorized" });
-  } else {
-    // return
+    else {
+      res
+        .status(401)
+        .json({ success: false, message: "Password Incorrect: Unauthorized" });
+    }
+  } 
+  else{
+    const s3Url = await getSignedUrlFromS3(file.path.S);
+    res.status(200).json({success:true,message:"File Retrieved",data:s3Url});
   }
 };
 
 const getSignedUrlFromS3 = async (fileUrl) => {
   try {
     const filePath = urlUtil.getFilePathFromUrl(fileUrl);
-    const diffIndex = path.substring(1, filePath.length).indexOf("/");
-    const bucketName = path.substring(0, filePath + 1);
-    const fileName = path.substring(filePath + 1, filePath.length);
+    console.log(filePath);
+    const fileName = filePath.substring(1, filePath.length);
+    const bucketName="snapshare-s3-bucket";
     const bucketGetParameters = {
       Bucket: bucketName,
       Key: fileName,
@@ -188,10 +215,7 @@ const getSignedUrlFromS3 = async (fileUrl) => {
     const signedUrl = await getSignedUrl(s3Client, readableFileStream, {
       expiresIn: 3600,
     });
-    console.log(someStream);
-    //   res.attachment("one.txt");
-    // someStream.pipe(res);
-    res.json(signedUrl);
+    return signedUrl;
   } catch (error) {
     console.log(error);
   }
@@ -202,4 +226,6 @@ exports.addMembers = addMembers;
 exports.getFilesForUser = getFilesForUser;
 exports.removeMembers = removeMembers;
 exports.test = test;
+exports.getFile = getFile;
+exports.getSharedFile = getSharedFile;
 // creating a dynamodb PUT object

@@ -6,4 +6,6 @@ router.put('/api/files',fileController.addMembers);
 router.get('/api/files',fileController.getFilesForUser);
 router.get('/api/files/test',fileController.test);
 router.delete('/api/files',fileController.removeMembers);
+router.post('/api/files/download',fileController.getFile);
+router.post('/api/files/shared',fileController.getSharedFile);
 module.exports=router;
