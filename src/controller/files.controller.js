@@ -33,6 +33,9 @@ const createNewFileForUser = async (req, res) => {
       createdBy: { S: user.Email },
       password: { S: password },
       passwordEnabled: { S: String(req.body.passwordEnabled) },
+      fileName:{S:fileRequest.fileName},
+      fileSize:{S:fileRequest.fileSize},
+      fileType:{S:fileRequest.fileType},
       enabled: { S: "true" }
     },
   };
