@@ -8,5 +8,5 @@ router.get('/api/files/test',fileController.test);
 router.delete('/api/files',fileController.removeMembers);
 router.post('/api/files/download',fileController.getFile);
 router.get('/api/files/shared',fileController.getSharedFile);
-router.post('/api/files/delete',fileController.deleteFileForUser);
+router.delete('/api/files/delete',fileController.deleteFileForUser);
 module.exports=router;

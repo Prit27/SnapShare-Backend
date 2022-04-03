@@ -159,11 +159,12 @@ const getFileById = async (fileId) => {
 */
 const getSharedFile = async (req, res) => {
   const user = auth.getAuthenticatedUser();
+  console.log(user);
   const params = {
     TableName: "Files",
     FilterExpression: "contains (sharedWith,:sharedWith)",
     ExpressionAttributeValues: {
-      ":sharedWith": { S: user.email },
+      ":sharedWith": { S: "mitulmalani15898@gmail.com" },
     },
   };
   try {
