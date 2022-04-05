@@ -164,7 +164,7 @@ const getSharedFile = async (req, res) => {
     TableName: "Files",
     FilterExpression: "contains (sharedWith,:sharedWith)",
     ExpressionAttributeValues: {
-      ":sharedWith": { S: "mitulmalani15898@gmail.com" },
+      ":sharedWith": { S: user.email },
     },
   };
   try {
