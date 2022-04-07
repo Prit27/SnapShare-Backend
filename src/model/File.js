@@ -55,9 +55,6 @@ const createFileTable = async () =>{
     console.log(error)
   }
 }
-//createFileTable();
-//
-// Table Created -- defining model
 
 
 

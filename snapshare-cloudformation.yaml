@@ -1,0 +1,714 @@
+Description: SnapShare infratructure by CloudFormation
+Parameters:
+  SnapShareBackendApplication:
+    Type: String
+    Default: snapshare-application-backend
+  HashKeyName:
+    Description: HashKey Primary Key (ID)
+    Type: String
+    Default: id
+  HashKeyType:
+    Description: HashType PrimaryKey Type
+    Type: String
+    Default: S
+    MinLength: "1"
+    MaxLength: "1"
+  ReadCapacityUnits:
+    Description: Provisioned read throughput
+    Type: Number
+    Default: "1"
+    MinValue: "1"
+    MaxValue: "1"
+  WriteCapacityUnits:
+    Description: Provisioned write throughput
+    Type: Number
+    Default: "1"
+    MinValue: "1"
+    MaxValue: "1"
+  TableName:
+    Type: String
+    Description: The name of the DynamoDB Table
+    Default: FilesDB
+  SnapShareUserPoolName:
+    Type: String
+    Default: DemoSnapShareUserPool
+  SnapShareUserPoolClientName:
+    Type: String
+    Default: DemoSnapShareUserPoolClient
+  SnapShareUserPoolDomainName:
+    Type: String
+    Default: demosnapshare
+  SnapShareDocsBucketName:
+    Type: String
+    Default: demo-snapshare-s3-bucket
+  SnapShareImageBucketName:
+    Type: String
+    Default: demo-snapshare-image-s3-bucket
+  SnapSharePdfBucketName:
+    Type: String
+    Default: demo-snapshare-pdf-s3-bucket
+  SnapShareSecretsName:
+    Type: String
+    Default: DemoSnapShareSecrets
+  AwsAccessKeyId:
+    Type: String
+    Default: AKIA3FHOVY363YE7QOOG
+  AwsSecretAccessKeyId:
+    Type: String
+    Default: 48phoVCRWOYFunJ5B7TlvHpx1cqtaSPw2NMCnKlf
+  DemoLambda1Name:
+    Type: String
+    Default: DemoLambda1Name
+  DemoLambda2Name:
+    Type: String
+    Default: DemoLambda2Name
+
+Resources:
+  snapshareApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName:
+        Ref: SnapShareBackendApplication
+      Description: SnapShare backend application
+  snapshareApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName:
+        Ref: snapshareApplication
+      Description: SnapShare backend
+      SourceBundle:
+        S3Bucket: !Sub "elasticbeanstalk-${AWS::Region}-767152211709"
+        S3Key: 2022096wDb-SnapShare-Backend.zip
+  snapshareConfigurationTemplate:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName:
+        Ref: snapshareApplication
+      Description: AWS ElasticBeanstalk Sample Configuration Template
+      OptionSettings:
+        - Namespace: aws:autoscaling:asg
+          OptionName: MinSize
+          Value: "2"
+        - Namespace: aws:autoscaling:asg
+          OptionName: MaxSize
+          Value: "6"
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref MyInstanceProfile
+      SolutionStackName: "64bit Amazon Linux 2 v5.5.1 running Node.js 16"
+  snapshareEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: snapshareApplication
+      EnvironmentName:
+        Ref: SnapShareBackendApplication
+      CNAMEPrefix:
+        Ref: SnapShareBackendApplication
+      Description: AWS ElasticBeanstalk Sample Environment
+      TemplateName:
+        Ref: snapshareConfigurationTemplate
+      VersionLabel:
+        Ref: snapshareApplicationVersion
+  MyInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: Beanstalk EC2 role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref MyInstanceRole
+  Files:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      AttributeDefinitions:
+        - AttributeName: !Ref HashKeyName
+          AttributeType: !Ref HashKeyType
+      KeySchema:
+        - AttributeName: !Ref HashKeyName
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref "ReadCapacityUnits"
+        WriteCapacityUnits: !Ref "WriteCapacityUnits"
+  ApiGatewayRestApi:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: "SnapShareBackend-CF"
+      ApiKeySourceType: "HEADER"
+      EndpointConfiguration:
+        Types:
+          - "REGIONAL"
+  ApiGatewayResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "snapshare"
+      ParentId: !GetAtt
+        - ApiGatewayRestApi
+        - RootResourceId
+  ApiGatewayResource1:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "files"
+      ParentId: !Ref ApiGatewayResource
+  ApiGatewayResource2:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "members"
+      ParentId: !Ref ApiGatewayResource
+  ApiGatewayResource3:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "delete"
+      ParentId: !Ref ApiGatewayResource1
+  ApiGatewayResource4:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "shared"
+      ParentId: !Ref ApiGatewayResource1
+  ApiGatewayResource5:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "download"
+      ParentId: !Ref ApiGatewayResource1
+  ApiGatewayResource6:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      PathPart: "remove"
+      ParentId: !Ref ApiGatewayResource2
+  ApiGatewayMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource1
+      HttpMethod: "GET"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource1
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "GET"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/files"
+  ApiGatewayMethod2:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource1
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource1
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/files"
+  ApiGatewayMethod3:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource2
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource2
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/members"
+  ApiGatewayMethod7:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource4
+      HttpMethod: "GET"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource4
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "GET"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/files/shared"
+  ApiGatewayMethod8:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource3
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource3
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/files/delete"
+  ApiGatewayMethod13:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource5
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource5
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/files/download"
+  ApiGatewayMethod14:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResource6
+      HttpMethod: "POST"
+      AuthorizationType: "NONE"
+      ApiKeyRequired: false
+      RequestParameters:
+        "method.request.header.Authorization": true
+      MethodResponses:
+        - ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Origin": false
+          StatusCode: "200"
+      Integration:
+        CacheNamespace: !Ref ApiGatewayResource6
+        ConnectionType: "INTERNET"
+        IntegrationHttpMethod: "POST"
+        IntegrationResponses:
+          - ResponseParameters:
+              "method.response.header.Access-Control-Allow-Origin": "'*'"
+            ResponseTemplates: {}
+            StatusCode: "200"
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestParameters:
+          "integration.request.header.Authorization": "method.request.header.Authorization"
+        TimeoutInMillis: 29000
+        Type: "HTTP"
+        Uri: !Sub "http://snapshare-application-backend.${AWS::Region}.elasticbeanstalk.com/api/members/remove"
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      StageName: "Production"
+    DependsOn:
+      [
+        "ApiGatewayRestApi",
+        "ApiGatewayMethod",
+        "ApiGatewayMethod13",
+        "ApiGatewayMethod14",
+        "ApiGatewayMethod2",
+        "ApiGatewayMethod3",
+        "ApiGatewayMethod7",
+        "ApiGatewayMethod8",
+        "ApiGatewayResource",
+        "ApiGatewayResource1",
+        "ApiGatewayResource2",
+        "ApiGatewayResource3",
+        "ApiGatewayResource4",
+        "ApiGatewayResource5",
+        "ApiGatewayResource6",
+      ]
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${SnapShareUserPoolName}
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: False
+      AutoVerifiedAttributes:
+        - email
+      EmailConfiguration:
+        EmailSendingAccount: "COGNITO_DEFAULT"
+      EmailVerificationSubject: "Your verification link for SnapShare"
+      MfaConfiguration: "OFF"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: True
+          RequireNumbers: True
+          RequireSymbols: True
+          RequireUppercase: True
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: family_name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: subscriptionPlan
+          AttributeDataType: String
+          Mutable: true
+      UsernameAttributes: [email]
+      UsernameConfiguration:
+        CaseSensitive: False
+      UserPoolAddOns:
+        AdvancedSecurityMode: "OFF"
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${SnapShareUserPoolClientName}
+      GenerateSecret: false
+      PreventUserExistenceErrors: "ENABLED"
+      UserPoolId: !Ref UserPool
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub ${SnapShareUserPoolDomainName}
+      UserPoolId: !Ref UserPool
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Description: Creating Amazon S3 bucket for storing documnets of users
+    Properties:
+      BucketName: !Sub ${SnapShareDocsBucketName}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: ["PUT"]
+            AllowedOrigins: ["*"]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+
+  BucketForImage:
+    Type: AWS::S3::Bucket
+    DependsOn: BucketPermissionImage
+    Properties:
+      BucketName: !Sub ${SnapShareImageBucketName}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: ["PUT"]
+            AllowedOrigins: ["*"]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: False
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Function: !GetAtt ImageToPdfLambda.Arn
+
+  S3PdfBucket:
+    Type: AWS::S3::Bucket
+    Description: Creating Amazon S3 bucket for storing pdfs of image to pdf
+    Properties:
+      BucketName: !Sub ${SnapSharePdfBucketName}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: ["GET", "HEAD"]
+            AllowedOrigins: ["*"]
+
+  S3ImageBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketForImage
+      PolicyDocument:
+        Statement:
+          - Action:
+              - "s3:*"
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${SnapShareImageBucketName}
+              - !Sub arn:aws:s3:::${SnapShareImageBucketName}/*
+            Principal: "*"
+
+  S3PdfBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3PdfBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - "s3:*"
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${SnapSharePdfBucketName}
+              - !Sub arn:aws:s3:::${SnapSharePdfBucketName}/*
+            Principal: "*"
+          - Action:
+              - "s3:GetObject"
+            Effect: Allow
+            Resource: !Sub arn:aws:s3:::${SnapSharePdfBucketName}/*
+            Principal: "*"
+  SecretsManager:
+    Type: "AWS::SecretsManager::Secret"
+    DependsOn:
+      - UserPool
+      - UserPoolClient
+    Properties:
+      Name: !Sub ${SnapShareSecretsName}
+      SecretString:
+        "Fn::Join":
+          - ""
+          - - '{"USER_POOL_ID":"'
+            - Ref: UserPool
+            - '","USER_POOL_CLIENT_ID":"'
+            - Ref: UserPoolClient
+            - '","AWS_ACCESS_KEY_ID":"'
+            - "Fn::Sub": "${AwsAccessKeyId}"
+            - '","AWS_SECRET_ACCESS_KEY":"'
+            - "Fn::Sub": "${AwsSecretAccessKeyId}"
+            - '","S3_RESOURCE_URL":"'
+            - "Fn::Sub": "https://${SnapShareDocsBucketName}.s3.amazonaws.com/"
+            - '","S3_IMAGE_URL":"'
+            - "Fn::Sub": "https://${SnapShareImageBucketName}.s3.amazonaws.com/"
+            - '","S3_PDF_URL":"'
+            - "Fn::Sub": "https://${SnapSharePdfBucketName}.s3.amazonaws.com/"
+            - '","S3_BUCKET_NAME":"'
+            - "Fn::Sub": "${SnapShareDocsBucketName}"
+            - '","S3_IMAGE_BUCKET_NAME":"'
+            - "Fn::Sub": ${SnapShareImageBucketName}
+            - '","S3_PDF_BUCKET_NAME":"'
+            - "Fn::Sub": ${SnapSharePdfBucketName}
+            - '"}'
+
+  BucketPermissionImage:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref ImageToPdfLambda
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref "AWS::AccountId"
+      SourceArn: !Sub "arn:aws:s3:::${SnapShareImageBucketName}"
+
+  ImageToPdfLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "A lambda function which converts image to PDF"
+      FunctionName: !Sub ${DemoLambda1Name}
+      Handler: "lambda_function.lambda_handler"
+      Role: !GetAtt FirstLambdaPermission.Arn
+      Code:
+        S3Bucket: "snapshare-source-code-lambda"
+        S3Key: lambda.zip
+      Runtime: "python3.8"
+      Architectures:
+        - "x86_64"
+      MemorySize: 128
+      Timeout: 10
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:770693421928:layer:Klayers-python38-Pillow:15"
+
+  FirstLambdaPermission:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: S3Policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "S3:DeleteObject"
+                Resource: !Sub "arn:aws:s3:::${SnapShareImageBucketName}/*"
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Description: "An API Gateway to get credentials"
+      Name: get-creds
+      ProtocolType: HTTP
+
+  CredentialsProvider:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "A lambda function which provides credentials"
+      FunctionName: !Sub ${DemoLambda2Name}
+      Handler: "lambda_function.lambda_handler"
+      Role: !GetAtt SecondLambdaPermission.Arn
+      Code:
+        S3Bucket: "snapshare-source-code-lambda"
+        S3Key: lambda2.zip
+      Runtime: "python3.8"
+      Architectures:
+        - "x86_64"
+      MemorySize: 128
+      Timeout: 10
+
+  SecondLambdaPermission:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: APIGatewayPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "S3:DeleteObject"
+                Resource: !Sub "arn:aws:s3:::${SnapShareImageBucketName}/*"

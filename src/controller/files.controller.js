@@ -8,9 +8,7 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const uuid = require("uuid");
 const {
   FILE_TABLE_NAME,
-  MEMBER_UPDATE_VALUE,
-  ADD_MEMBER_UPDATE_EXPRESSION,
-  DELETE_MEMBER_UPDATE_EXPRESSION,
+  BUCKET_NAME
 } = require("../util/constants/constants");
 const { GetObjectCommand } = require("@aws-sdk/client-s3");
 
@@ -154,14 +152,11 @@ const getFileById = async (fileId) => {
   }
 };
 
-/*  GET Shared Files for User 
-  REFER https://stackoverflow.com/questions/44990872/dynamodb-query-by-contains-one-of-the-values-from-array-for-node-js
-*/
 const getSharedFile = async (req, res) => {
   const user = auth.getAuthenticatedUser();
   console.log(user);
   const params = {
-    TableName: "Files",
+    TableName: FILE_TABLE_NAME,
     FilterExpression: "contains (sharedWith,:sharedWith)",
     ExpressionAttributeValues: {
       ":sharedWith": { S: user.email },
@@ -211,7 +206,7 @@ const getSignedUrlFromS3 = async (fileUrl) => {
     const filePath = urlUtil.getFilePathFromUrl(fileUrl);
     console.log(filePath);
     const fileName = filePath.substring(1, filePath.length);
-    const bucketName = "snapshare-s3-bucket";
+    const bucketName = BUCKET_NAME;
     const bucketGetParameters = {
       Bucket: bucketName,
       Key: fileName,
@@ -230,10 +225,9 @@ const deleteFileForUser = async (req, res) => {
   const fileId = req.body.fileId;
   const user = auth.getAuthenticatedUser();
   const file = await getFileById(fileId);
-  console.log(file);
   if (file.createdBy.S === user.email) {
     const params = {
-      TableName: "Files",
+      TableName: FILE_TABLE_NAME,
       Key: {
         id: file.id,
       },

@@ -1,5 +1,4 @@
 const auth = require('../util/auth/authenticator')
-const User = require('../model/User');
 const getUserDetails = (req,res) =>{
 try {
   const currentUser = auth.getAuthenticatedUser();
