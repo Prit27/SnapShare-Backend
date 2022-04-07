@@ -1,4 +1,4 @@
-const File = require("../model/File");
+const File = require("../model/Schema/File");
 const auth = require("../util/auth/authenticator");
 const dynamoDbClient = require("@aws-sdk/client-dynamodb");
 const client = require("../util/aws/dynamo/dynamo.provider");
